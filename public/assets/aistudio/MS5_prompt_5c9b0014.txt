@@ -1,0 +1,122 @@
+Build a vertical YouTube Short as a Three.js web project that renders frame by frame to an MP4.
+
+=== FILES I AM GIVING YOU ===
+- MS5_audio.wav  (final mix: voices + music + sound effects, 56.43 s, 48 kHz)
+- MS5.srt    (one cue per spoken line, timings match the audio exactly)
+Use the audio as the master clock. Total length = 56.43 s. Do not change or re-time the audio.
+
+=== OUTPUT ===
+- 1080x1920 (9:16), 30 fps, 1693 frames (56.43 s x 30).
+- MP4: H.264 High profile, VBR target 16 Mbps / max 20 Mbps, keyframe every 15 frames, yuv420p, AAC 48 kHz stereo 320 kbps, +faststart.
+- Use the GPU encoder if available (h264_nvenc, h264_amf or h264_qsv), otherwise libx264.
+
+=== PROJECT STRUCTURE ===
+- index.html: one <canvas> 1080x1920. Load three.js locally (no CDN at render time) with an importmap. Use EffectComposer + UnrealBloomPass (strength ~0.5, threshold ~0.75) + OutputPass. ACES tone mapping.
+- main.js: everything is DETERMINISTIC and driven by time t (seconds). Expose:
+    window.DUR = 56.43; window.ready (Promise that resolves after fonts, textures and shaders are loaded);
+    window.renderAt(t) draws exactly the frame at time t;
+    window.frameJPEG(t) returns renderAt(t) as a JPEG data URL (quality 0.95).
+  No Math.random() - use a seeded PRNG. No requestAnimationFrame timing in render mode. Same t = same picture every time.
+- Composite in a final 2D canvas: draw the WebGL frame, then characters, then text/infographics, captions, vignette, grain.
+- render.js (Node): start a tiny local HTTP server, open the page in headless Chrome/Edge with puppeteer-core
+  (flags: --ignore-gpu-blocklist --enable-gpu --use-angle=d3d11 on Windows), call frameJPEG(i/30) for every frame,
+  pipe the JPEGs to ffmpeg (image2pipe, mjpeg) and mux with the WAV. Log progress to render_log.txt.
+- RENDER.bat: checks Node is installed, runs "npm install puppeteer-core ffmpeg-static" the first time, then "node render.js".
+- ?play URL mode: live preview with the audio for checking.
+
+=== LOOK AND STYLE ===
+- Channel: Voice of Times. Series name on screen: "MONEY SECRETS #5".
+- Every shot = 3 depth layers:
+  1) BACK: a full 3D world (sky dome with gradient, fog, stars or dust particles, lights). Never a flat or empty background.
+  2) MIDDLE: 3D objects that explain the idea (price tags, cart, vault, coins, charts, bars, timeline).
+  3) FRONT: two REALISTIC 3D characters (see CHARACTERS below), standing in the 3D scene and lit by the same lights.
+- The camera always moves slowly (dolly, crane or orbit) and every shot starts with a short punch-in (FOV 8% tighter, easing out over 0.25 s).
+- RULE: something NEW on screen at least every 3 seconds (new shot, new 3D object, new big number or new text). Max shot length 2.8 s.
+- 2-frame white flash on cuts in the first 6 seconds and on the big moments only.
+- Colors: dark backgrounds, money green #22E07A, alert red #FF3B5C, highlight yellow #FFD54A, cyan #3CE0FF, orange #FF6A3A.
+- Font: Poppins Bold (bundle the TTF locally). All big text has a thick black outline and soft shadow.
+- Restrained glow: bloom only on bright lines and numbers, never on white backgrounds.
+- Film grain as a STILL noise image over everything at ~7% overlay, plus a soft vignette.
+- No real logos, no real people, no character names on screen.
+
+=== SAFE ZONES (1080x1920) ===
+- Headline / big numbers: y 250-700.
+- Captions: centred at y ~905, Poppins Bold 74 px, uppercase, black outline. Show 3 words at a time, timed inside each SRT cue
+  (split the cue text into 3-word chunks, duration proportional to chunk length). Colour by speaker: Narrator white, Man yellow #FFD54A, Woman teal #5CF2D0.
+- Characters: from y ~900 down to ~1720.
+- Keep everything out of the bottom 200 px and the right 120 px (YouTube buttons).
+
+=== FACT TAG COMPONENT ===
+Rounded black pill with a green "REAL" badge on the left and white text, 40 px. Pops in with a small overshoot.
+
+=== CHARACTERS (realistic 3D, no names) ===
+Two unnamed characters. Never show or say a name.
+- THE MAN: realistic adult man, late 20s, wearing a yellow hoodie and a red cap. Voice lines 2 and 8. In this story he is the borrower.
+- THE WOMAN: realistic adult woman, late 20s, wearing a teal sweater, hair in a ponytail. Voice lines 5 and 10. In this story she is the banker (smart blazer over the teal top is fine).
+Files (I will put them in assets/characters/ - downloaded from Mixamo as FBX "With Skin", converted to GLB):
+  man.glb, woman.glb                      (rigged realistic characters)
+  Animations (FBX "Without Skin" -> GLB), one file per clip, for each character:
+  man_idle.glb, man_talking.glb, man_surprised.glb, man_shrugging.glb, man_cheering.glb, man_walking.glb, man_looking.glb
+  woman_idle.glb, woman_talking.glb, woman_pointing.glb, woman_walking.glb, woman_typing.glb (Mixamo "Typing"; if missing use woman_idle)
+How to use them:
+- Load with GLTFLoader, play clips with THREE.AnimationMixer. Drive the mixer with mixer.setTime(t - clipStart) so every frame is deterministic (never use a real clock).
+- Crossfade between clips over 0.3 s by blending two actions' weights from t.
+- While a character speaks (times from the SRT), play the "talking" clip, plus a small head nod. If the model has a jaw/mouth morph target, open it to the audio rhythm; if not, keep the camera medium or wide on speakers (no mouth close-ups).
+- Characters cast soft shadows (shadow-mapped key light, PCFSoft). Use a warm key light, cool rim light and an environment map (RoomEnvironment) so skin and clothes look real.
+- Characters stand on the floor, never float. Keep them inside y 900-1720 on screen and never in front of big text.
+- If a .glb file is missing, show a neutral grey stand-in mannequin and log a warning (do not crash).
+
+=== SHOT LIST (times in seconds, match the audio) - story: "The $10,000 That Vanished" ===
+Realistic look throughout: PBR materials, soft shadows, subtle depth of field on close-ups.
+Money is shown as a GLOWING stack/stream of light (no real banknote designs). No real bank names or logos.
+
+LINE 1 Narrator 0.10-4.85 "He just made his last loan payment... and $10,000 disappeared from the world."
+  0.00-1.60  Night apartment, warm lamp. THE MAN on the sofa taps "PAY" on a phone (big phone screen overlay: "FINAL PAYMENT"). Pop sound.
+  1.60-3.20  A glowing $10,000 stack beside him starts dissolving into golden particles.
+  3.20-4.95  Particles fly out of the window into the night sky. Headline "-$10,000 FROM THE WORLD".
+LINE 2 Man 5.03-7.59 "Wait... what? Where did it go?"
+  4.95-7.70  Medium shot, THE MAN looks around confused (man_surprised then man_looking). Text "WHERE DID IT GO?".
+LINE 3 Narrator 7.94-12.80 "Rewind one year. He needs $10,000 for a car, so he walks into a bank."
+  7.70-9.40  Rewind effect: particles fly backwards, VHS-style scan lines, clock spinning backwards. Text "1 YEAR EARLIER".
+  9.40-11.10 Car showroom window at day: a car with a "$10,000" tag; he looks at it.
+  11.10-12.90 He walks into a bright generic bank lobby (man_walking).
+LINE 4 Narrator 12.98-19.74 "The banker doesn't open a vault. She doesn't take anyone's savings. She just types 10,000 into his account."
+  12.90-14.80 A big vault door stays shut; red label "VAULT: CLOSED".
+  14.80-16.80 Rows of savings drawers labeled "OTHER PEOPLE'S SAVINGS" stay untouched; label "NOT TOUCHED".
+  16.80-19.80 THE WOMAN (banker) at a desk typing (woman_typing). Screen overlay: account balance "$0" -> "$10,000" with a typing cursor.
+LINE 5 Woman 19.92-22.88 "That money didn't exist yesterday. The bank just created it."
+  19.80-22.95 Medium shot of THE WOMAN, woman_talking then woman_pointing at the screen. Huge text "NEW MONEY".
+LINE 6 Narrator 23.23-28.80 "He buys the car. The dealer deposits it in another bank. Now it's moving through the economy."
+  22.95-25.00 He drives the new car out of the showroom (car on a turntable / road).
+  25.00-26.90 A glowing money stream flows from the dealer into a second generic bank building.
+  26.90-28.90 Aerial city at dusk: glowing lines of money spreading between buildings. Text "MOVING THROUGH THE ECONOMY".
+LINE 7 Narrator 28.98-33.80 "Every month he pays it back... and the part that repays the loan... is deleted."
+  28.90-31.30 A 3D wall calendar flips JAN -> DEC; every month a slice of the glowing stack vanishes. Counter "$10,000" -> "$0".
+  31.30-33.90 Close-up of the last slice dissolving. Text "DELETED".
+LINE 8 Man 33.98-37.98 "So my loan made the money... and paying it off erased it?"
+  33.90-38.05 Back in the apartment, THE MAN holds a "PAID IN FULL" letter (man_shrugging while talking). Text "MADE IT... ERASED IT?".
+LINE 9 Narrator 38.16-45.66 "Exactly. The Bank of England said it plainly. A new loan creates money, and repaying it destroys money."
+  38.05-40.60 A grand stone hall (generic central bank style, no logo). Fact tag "BANK OF ENGLAND, 2014".
+  40.60-43.10 Green arrow animates: "LOAN -> MONEY CREATED".
+  43.10-45.75 Red arrow animates: "REPAY -> MONEY DESTROYED".
+LINE 10 Woman 46.02-49.58 "So when everyone stops borrowing, the amount of money can actually shrink."
+  45.75-47.70 THE WOMAN by a window at night (woman_talking).
+  47.70-49.70 The glowing city money-lines fade out one by one. Text "MONEY CAN SHRINK".
+LINE 11 Narrator 49.76-55.75 "That's Money Secret #5. Follow for #6: the night a bank died."
+  49.70-52.40 A glowing card "MONEY SECRET #5" turns in 3D; both characters in front (idle).
+  52.40-54.90 Card flips to "#6: THE NIGHT A BANK DIED": a dark generic bank with a flickering "CLOSED" sign and rain. Text "FOLLOW".
+  54.90-56.43 Return to the opening phone "FINAL PAYMENT" shot so the Short loops into frame 1.
+
+Small text "Educational only, not financial advice" (36 px) in the last 3 seconds, above the bottom 200 px.
+One headline at a time and at most one fact tag at a time - never overlap texts.
+
+=== TOP PROGRESS BAR ===
+From 0 to 49.8 s show a thin yellow bar at y ~190 with small text "MONEY SECRET #5" above it, filling left to right.
+
+=== QUALITY CHECKS BEFORE RENDERING ===
+1. Render preview stills at 1, 2.5, 4, 6, 8.5, 10, 12, 14, 16, 18.5, 21, 24, 26, 28, 30, 32.5, 36, 39, 42, 44.5, 47, 49, 51, 53.5, 55.8 s and look at them.
+2. Characters look realistic, stand on the floor, play the right clip, and never cover the headline.
+3. No text outside the 1080 px width; no text overlapping another text; captions never hidden behind objects.
+4. No shot longer than 2.8 s; nothing on screen identical for more than 3 s.
+5. 3D worlds never show an empty edge or a black void.
+6. Final MP4 = 1080x1920, 30 fps, 56.43 s, audio in sync with the captions.

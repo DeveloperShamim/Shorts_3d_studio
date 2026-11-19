@@ -1,0 +1,123 @@
+Build a vertical YouTube Short as a Three.js web project that renders frame by frame to an MP4.
+
+=== FILES I AM GIVING YOU ===
+- MS4_audio.wav  (final mix: voices + music + sound effects, 59.36 s, 48 kHz)
+- MS4.srt    (one cue per spoken line, timings match the audio exactly)
+Use the audio as the master clock. Total length = 59.36 s. Do not change or re-time the audio.
+
+=== OUTPUT ===
+- 1080x1920 (9:16), 30 fps, 1781 frames (59.36 s x 30).
+- MP4: H.264 High profile, VBR target 16 Mbps / max 20 Mbps, keyframe every 15 frames, yuv420p, AAC 48 kHz stereo 320 kbps, +faststart.
+- Use the GPU encoder if available (h264_nvenc, h264_amf or h264_qsv), otherwise libx264.
+
+=== PROJECT STRUCTURE ===
+- index.html: one <canvas> 1080x1920. Load three.js locally (no CDN at render time) with an importmap. Use EffectComposer + UnrealBloomPass (strength ~0.5, threshold ~0.75) + OutputPass. ACES tone mapping.
+- main.js: everything is DETERMINISTIC and driven by time t (seconds). Expose:
+    window.DUR = 59.36; window.ready (Promise that resolves after fonts, textures and shaders are loaded);
+    window.renderAt(t) draws exactly the frame at time t;
+    window.frameJPEG(t) returns renderAt(t) as a JPEG data URL (quality 0.95).
+  No Math.random() - use a seeded PRNG. No requestAnimationFrame timing in render mode. Same t = same picture every time.
+- Composite in a final 2D canvas: draw the WebGL frame, then characters, then text/infographics, captions, vignette, grain.
+- render.js (Node): start a tiny local HTTP server, open the page in headless Chrome/Edge with puppeteer-core
+  (flags: --ignore-gpu-blocklist --enable-gpu --use-angle=d3d11 on Windows), call frameJPEG(i/30) for every frame,
+  pipe the JPEGs to ffmpeg (image2pipe, mjpeg) and mux with the WAV. Log progress to render_log.txt.
+- RENDER.bat: checks Node is installed, runs "npm install puppeteer-core ffmpeg-static" the first time, then "node render.js".
+- ?play URL mode: live preview with the audio for checking.
+
+=== LOOK AND STYLE ===
+- Channel: Voice of Times. Series name on screen: "MONEY SECRETS #4".
+- Every shot = 3 depth layers:
+  1) BACK: a full 3D world (sky dome with gradient, fog, stars or dust particles, lights). Never a flat or empty background.
+  2) MIDDLE: 3D objects that explain the idea (price tags, cart, vault, coins, charts, bars, timeline).
+  3) FRONT: two REALISTIC 3D characters (see CHARACTERS below), standing in the 3D scene and lit by the same lights.
+- The camera always moves slowly (dolly, crane or orbit) and every shot starts with a short punch-in (FOV 8% tighter, easing out over 0.25 s).
+- RULE: something NEW on screen at least every 3 seconds (new shot, new 3D object, new big number or new text). Max shot length 2.8 s.
+- 2-frame white flash on cuts in the first 6 seconds and on the big moments only.
+- Colors: dark backgrounds, money green #22E07A, alert red #FF3B5C, highlight yellow #FFD54A, cyan #3CE0FF, orange #FF6A3A.
+- Font: Poppins Bold (bundle the TTF locally). All big text has a thick black outline and soft shadow.
+- Restrained glow: bloom only on bright lines and numbers, never on white backgrounds.
+- Film grain as a STILL noise image over everything at ~7% overlay, plus a soft vignette.
+- No real logos, no real people, no character names on screen.
+
+=== SAFE ZONES (1080x1920) ===
+- Headline / big numbers: y 250-700.
+- Captions: centred at y ~905, Poppins Bold 74 px, uppercase, black outline. Show 3 words at a time, timed inside each SRT cue
+  (split the cue text into 3-word chunks, duration proportional to chunk length). Colour by speaker: Narrator white, Man yellow #FFD54A, Woman teal #5CF2D0.
+- Characters: from y ~900 down to ~1720.
+- Keep everything out of the bottom 200 px and the right 120 px (YouTube buttons).
+
+=== FACT TAG COMPONENT ===
+Rounded black pill with a green "REAL" badge on the left and white text, 40 px. Pops in with a small overshoot.
+
+=== CHARACTERS (realistic 3D, no names) ===
+Two unnamed characters. Never show or say a name.
+- THE MAN: realistic adult man, late 20s, wearing a yellow hoodie and a red cap. Voice lines 6 and 10.
+- THE WOMAN: realistic adult woman, late 20s, wearing a teal sweater, hair in a ponytail. Voice line 7.
+Files (I will put them in assets/characters/ - downloaded from Mixamo as FBX "With Skin", converted to GLB):
+  man.glb, woman.glb                      (rigged realistic characters)
+  Animations (FBX "Without Skin" -> GLB), one file per clip, for each character:
+  man_idle.glb, man_talking.glb, man_surprised.glb, man_shrugging.glb, man_cheering.glb, man_walking.glb, man_looking.glb
+  woman_idle.glb, woman_talking.glb, woman_pointing.glb, woman_walking.glb
+How to use them:
+- Load with GLTFLoader, play clips with THREE.AnimationMixer. Drive the mixer with mixer.setTime(t - clipStart) so every frame is deterministic (never use a real clock).
+- Crossfade between clips over 0.3 s by blending two actions' weights from t.
+- While a character speaks (times from the SRT), play the "talking" clip, plus a small head nod. If the model has a jaw/mouth morph target, open it to the audio rhythm; if not, keep the camera medium or wide on speakers (no mouth close-ups).
+- Characters cast soft shadows (shadow-mapped key light, PCFSoft). Use a warm key light, cool rim light and an environment map (RoomEnvironment) so skin and clothes look real.
+- Characters stand on the floor, never float. Keep them inside y 900-1720 on screen and never in front of big text.
+- If a .glb file is missing, show a neutral grey stand-in mannequin and log a warning (do not crash).
+
+=== SHOT LIST (times in seconds, match the audio) - story: "The Life of a $100 Bill" ===
+Realistic look throughout: PBR materials, soft shadows, shallow depth of field (BokehPass, subtle) on close-ups.
+Draw the banknote as a GENERIC green note with "$100" text and a blue vertical ribbon. Do NOT copy the real US $100 design, portrait or seals.
+
+LINE 1 Narrator 0.10-5.06 "This $100 bill cost about 11 cents to make. So why is it worth $100?"
+  0.00-1.70  Macro shot: a single generic $100 note floating and slowly turning in warm light, dust in the air. Boom on frame 0.
+  1.70-3.40  Counter appears beside it: "11¢" in white.
+  3.40-5.20  Counter jumps "11¢ -> $100" with a punch; text "WHY?".
+LINE 2 Narrator 5.41-10.60 "Its life starts at a government printing plant, as a blank sheet of cotton and linen paper."
+  5.20-7.60  Realistic printing hall (generic, industrial): long machines, lights, camera tracking along rollers.
+  7.60-10.70 Close-up: blank white sheets feeding through rollers. Fact tag "75% COTTON, 25% LINEN".
+LINE 3 Narrator 10.78-16.39 "Ink, a blue security ribbon, and about 11 cents later... it's done."
+  10.70-12.60 Green ink rollers pressing the sheet; the pattern appears.
+  12.60-14.50 A blue ribbon slides into the note (macro, shallow depth of field).
+  14.50-16.50 A blade cuts a sheet into a stack of notes. Fact tag "FED: 11.3¢ PER $100 NOTE (2025)". Text "DONE".
+LINE 4 Narrator 16.57-19.99 "This year, the Fed ordered up to 877 million of them."
+  16.50-18.30 Pallets of bundled notes stacking up toward a high warehouse ceiling.
+  18.30-20.10 Big counter "877,000,000". Fact tag "2026 FED PRINT ORDER (UP TO)".
+LINE 5 Narrator 20.17-26.27 "It ships to a Federal Reserve bank... then to a local bank... then into his wallet."
+  20.10-22.10 Armored truck (generic) driving at night through a city street. Text "FEDERAL RESERVE BANK".
+  22.10-24.10 Bank vault (generic) with cash drawers. Text "LOCAL BANK".
+  24.10-26.40 Street ATM at dusk; THE MAN walks up (man_walking) and pulls out the note (then man_looking).
+LINE 6 Man 26.62-29.93 "So it's just paper... worth a hundred bucks?"
+  26.40-30.00 Medium shot of THE MAN holding the note up to a street light (man_shrugging while talking). Text "JUST PAPER?".
+LINE 7 Woman 30.11-35.00 "It's worth $100 because everyone agrees it is. The store, the bank, the government."
+  30.00-32.40 THE WOMAN walks into frame beside him (woman_walking -> woman_talking).
+  32.40-35.10 She points (woman_pointing); behind them three buildings light up one by one: "STORE", "BANK", "GOVERNMENT".
+LINE 8 Narrator 35.18-41.62 "The government takes it for taxes, and the law says it's good for all debts. That's the secret: trust."
+  35.10-37.20 A tax form and the note side by side; stamp "ACCEPTED FOR TAXES".
+  37.20-39.40 Macro on engraved-looking words "LEGAL TENDER FOR ALL DEBTS" (plain text on the generic note). Fact tag "PRINTED ON EVERY FED NOTE".
+  39.40-41.70 Huge glowing word "TRUST" over the city at night.
+LINE 9 Narrator 41.97-48.57 "Our bill changes hands for about 15 years. Then it's worn out, shredded, and replaced."
+  41.70-44.10 Fast montage: the note passing hand to hand (café, taxi, shop counter) with a year counter "YEAR 1 ... YEAR 15".
+  44.10-46.30 The note gets creased, faded and torn. Fact tag "$100 NOTE LIFESPAN ~15 YEARS".
+  46.30-48.70 Industrial shredder; confetti of green paper. Then a crisp new note drops in its place.
+LINE 10 Man 48.75-52.09 "15 years for 11 cents? Best deal ever."
+  48.70-52.20 THE MAN laughing (man_cheering) with the new note. Text "BEST DEAL EVER".
+LINE 11 Narrator 52.27-58.67 "That's Money Secret #4. Follow for #5: when you pay off a loan, money disappears."
+  52.20-55.00 A glowing card "MONEY SECRET #4" turns in 3D; both characters in front (idle).
+  55.00-57.80 Card flips to "#5: PAY OFF A LOAN... MONEY DISAPPEARS" and a stack of money dissolves into particles. Text "FOLLOW".
+  57.80-59.36 Return to the opening floating note so the Short loops into frame 1.
+
+Small text "Educational only, not financial advice" (36 px) in the last 3 seconds, above the bottom 200 px.
+Keep all text from overlapping other text: one headline at a time, at most one fact tag at a time.
+
+=== TOP PROGRESS BAR ===
+From 0 to 52.3 s show a thin yellow bar at y ~190 with small text "MONEY SECRET #4" above it, filling left to right.
+
+=== QUALITY CHECKS BEFORE RENDERING ===
+1. Render preview stills at 1, 3, 4.5, 6.5, 9, 11.5, 13.5, 15.5, 17.5, 19, 21, 23, 25, 28, 31, 34, 36, 38.5, 40.5, 43, 45, 47.5, 50, 53.5, 56.5, 58.5 s and look at them.
+2. Characters look realistic, stand on the floor, play the right clip, and never cover the headline.
+3. No text outside the 1080 px width; no text overlapping another text; captions never hidden behind objects.
+4. No shot longer than 2.8 s; nothing on screen identical for more than 3 s.
+5. 3D worlds never show an empty edge or a black void.
+6. Final MP4 = 1080x1920, 30 fps, 59.36 s, audio in sync with the captions.

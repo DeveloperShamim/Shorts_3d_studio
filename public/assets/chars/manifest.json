@@ -1,0 +1,4 @@
+{
+  "files": [],
+  "note": "Place Jordan (J_shock_up_0.png, J_shock_up_1.png, J_worry_shrug_0.png, J_worry_shrug_1.png, J_idle_0.png, J_idle_1.png) and Maya (M_worry_point_0.png, M_worry_point_1.png, M_smile_point_0.png, M_smile_point_1.png, M_cheer_cheer_0.png, M_cheer_cheer_1.png) PNG sprites in this folder. render.js automatically scans this folder at render time."
+}

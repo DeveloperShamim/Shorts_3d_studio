@@ -1,0 +1,4 @@
+{
+  "description": "Drop Mixamo-exported GLB files here (man.glb, woman.glb, man_idle.glb, man_talking.glb, man_surprised.glb, man_shrugging.glb, man_cheering.glb, man_walking.glb, man_looking.glb, woman_idle.glb, woman_talking.glb, woman_pointing.glb, woman_walking.glb) and list them in files[] for instant loading.",
+  "files": []
+}

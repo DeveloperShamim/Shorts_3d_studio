@@ -1,0 +1,8 @@
+{
+  "name": "Voice of Times — Money Secrets #1",
+  "description": "Deterministic Three.js 1080x1920 vertical YouTube Short studio with synchronized audio, 22-shot 3D motion graphics, and frame-by-frame MP4 rendering pipeline.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
